@@ -1,7 +1,7 @@
 """Robocorp Action Server toolkit."""
 from __future__ import annotations
 
-from typing import List, Optional, Type
+from typing import Any, Dict, List, Optional
 import requests
 import json
 
@@ -11,11 +11,11 @@ from langchain.chains.llm import LLMChain
 from langchain.tools.requests.tool import BaseRequestsTool
 from langchain.agents.agent_toolkits.robocorp.prompts import (
     API_CONTROLLER_PROMPT,
-    REQUESTS_GET_TOOL_DESCRIPTION,
     REQUESTS_POST_TOOL_DESCRIPTION,
     REQUESTS_RESPONSE_PROMPT,
     TOOLKIT_TOOL_DESCRIPTION,
 )
+from langchain.callbacks.manager import tracing_v2_enabled
 from langchain.agents.agent_toolkits.robocorp.spec import (
     reduce_openapi_spec,
     get_required_param_descriptions,
@@ -27,40 +27,34 @@ from langchain.prompts import PromptTemplate
 from langchain.agents.mrkl.base import ZeroShotAgent
 from langchain.agents.agent import AgentExecutor
 from langchain.agents.tools import Tool
+from langchain.callbacks.base import BaseCallbackHandler
+from langchain.callbacks.manager import CallbackManager
+from langsmith import Client
+
 
 MAX_RESPONSE_LENGTH = 5000
+LLM_TRACE_HEADER = "X-llm-trace"
+
+
+class RunDetailsCallbackHandler(BaseCallbackHandler):
+    def __init__(self, run_details: dict) -> None:
+        self.run_details = run_details
+
+    def on_tool_start(
+        self,
+        serialized: Dict[str, Any],
+        input_str: str,
+        **kwargs: Any,
+    ) -> None:
+        if "parent_run_id" in kwargs:
+            self.run_details["run_id"] = kwargs["parent_run_id"]
+        else:
+            if "run_id" in self.run_details:
+                self.run_details.pop("run_id")
 
 
 class ToolInputSchema(BaseModel):
     question: str = Field(...)
-
-
-class RequestsGetToolWithParsing(BaseRequestsTool, BaseTool):
-    """Requests GET tool with LLM-instructed extraction of truncated responses."""
-
-    name: str = "requests_get"
-    """Tool name."""
-    description = REQUESTS_GET_TOOL_DESCRIPTION
-    """Tool description."""
-    response_length: Optional[int] = MAX_RESPONSE_LENGTH
-    """Maximum length of the response to be returned."""
-    llm_chain: LLMChain
-    """LLMChain used to extract the response."""
-
-    def _run(self, text: str) -> str:
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError as e:
-            raise e
-        data_params = data.get("params")
-        response = self.requests_wrapper.get(data["url"], params=data_params)
-        response = response[: self.response_length]
-        return self.llm_chain.predict(
-            response=response, instructions=data["output_instructions"]
-        ).strip()
-
-    async def _arun(self, text: str) -> str:
-        raise NotImplementedError()
 
 
 class RequestsPostToolWithParsing(BaseRequestsTool, BaseTool):
@@ -73,15 +67,27 @@ class RequestsPostToolWithParsing(BaseRequestsTool, BaseTool):
     response_length: Optional[int] = MAX_RESPONSE_LENGTH
     """Maximum length of the response to be returned."""
     llm_chain: LLMChain
-    """LLMChain used to extract the response."""
+    run_details: dict
 
-    def _run(self, text: str) -> str:
+    def _run(self, text: str, **kwargs: Any) -> str:
         try:
             data = json.loads(text)
+
         except json.JSONDecodeError as e:
             raise e
+
+        try:
+            if "run_id" in self.run_details:
+                client = Client()
+                run = client.read_run(self.run_details["run_id"])
+                self.requests_wrapper.headers[LLM_TRACE_HEADER] = run.url
+        except Exception:
+            if LLM_TRACE_HEADER in self.requests_wrapper.headers:
+                self.requests_wrapper.headers.pop(LLM_TRACE_HEADER)
+
         response = self.requests_wrapper.post(data["url"], data["data"])
         response = response[: self.response_length]
+
         return self.llm_chain.predict(
             response=response, instructions=data["output_instructions"]
         ).strip()
@@ -109,13 +115,13 @@ class RobocorpToolkit(BaseToolkit):
         llm_chain = LLMChain(llm=self.llm, prompt=REQUESTS_RESPONSE_PROMPT)
 
         requests_wrapper = RequestsWrapper(headers={})
+        run_details = {}
 
         tools: List[BaseTool] = [
-            RequestsGetToolWithParsing(
-                requests_wrapper=requests_wrapper, llm_chain=llm_chain
-            ),
             RequestsPostToolWithParsing(
-                requests_wrapper=requests_wrapper, llm_chain=llm_chain
+                requests_wrapper=requests_wrapper,
+                llm_chain=llm_chain,
+                run_details=run_details,
             ),
         ]
 
@@ -131,6 +137,13 @@ class RobocorpToolkit(BaseToolkit):
             "tool_names": tool_names,
             "tool_descriptions": tool_descriptions,
         }
+
+        callbacks: List[BaseCallbackHandler] = []
+
+        with tracing_v2_enabled():
+            callbacks.append(RunDetailsCallbackHandler(run_details))
+
+        callback_manager = CallbackManager(callbacks)
 
         # Prepare the toolkit
         for name, _, docs in api_spec.endpoints:
@@ -154,7 +167,10 @@ class RobocorpToolkit(BaseToolkit):
             )
 
             executor = AgentExecutor.from_agent_and_tools(
-                agent=agent, tools=tools, verbose=True
+                agent=agent,
+                tools=tools,
+                verbose=True,
+                tags=["robocorp-action-server"],
             )
 
             toolkit.append(
@@ -163,6 +179,7 @@ class RobocorpToolkit(BaseToolkit):
                     func=executor.run,
                     description=tool_description,
                     args_schema=ToolInputSchema,
+                    callback_manager=callback_manager,
                 )
             )
 

@@ -2,15 +2,6 @@
 
 from langchain.prompts.prompt import PromptTemplate
 
-REQUESTS_GET_TOOL_DESCRIPTION = """Use this to GET content from an API.
-Input to the tool should be a json string with 3 keys: "url", "params" and "output_instructions".
-The value of "url" should be a string.
-The value of "params" should be a dict of the needed and available
-parameters from the OpenAPI spec related to the endpoint.
-The value of "output_instructions" should be instructions on what information to extract from the response,
-for example the id(s) for a resource(s) that the GET request fetches.
-"""
-
 REQUESTS_POST_TOOL_DESCRIPTION = """Use this when you want to POST to an API.
 Input to the tool should be a json string with 3 keys: "url", "data", and "output_instructions".
 The value of "url" should be a string.
