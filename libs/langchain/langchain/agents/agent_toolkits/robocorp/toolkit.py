@@ -107,9 +107,8 @@ class RobocorpToolkit(BaseToolkit):
 
     def get_tools(self) -> List[BaseTool]:
         # Fetch and format the API spec
-        response = requests.get(f"{self.url}/openapi.json")
-        json_data = response.json()
-        api_spec = reduce_openapi_spec(json_data)
+        response = requests.get(f"{self.url}/openapi.yaml")
+        api_spec = reduce_openapi_spec(response.text)
 
         # Prepare request tools
         llm_chain = LLMChain(llm=self.llm, prompt=REQUESTS_RESPONSE_PROMPT)
@@ -147,6 +146,9 @@ class RobocorpToolkit(BaseToolkit):
 
         # Prepare the toolkit
         for name, _, docs in api_spec.endpoints:
+            if not name.startswith("/api/actions"):
+                continue
+
             tool_name = f"robocorp_action_server_{docs['operationId']}"
             tool_description = TOOLKIT_TOOL_DESCRIPTION.format(
                 name=docs["summary"],

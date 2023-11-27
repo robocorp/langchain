@@ -1,4 +1,5 @@
 """OpenAPI spec representation helpers"""
+import yaml
 
 from dataclasses import dataclass
 from typing import List, Tuple
@@ -23,12 +24,14 @@ class ReducedOpenAPISpec:
     endpoints: List[Tuple[str, str, dict]]
 
 
-def reduce_openapi_spec(spec: dict, dereference: bool = True) -> ReducedOpenAPISpec:
+def reduce_openapi_spec(yaml_spec: str, dereference: bool = True) -> ReducedOpenAPISpec:
     """Simplify OpenAPI spec to only required information for the agent"""
+
+    spec = yaml.safe_load(yaml_spec)
 
     # 1. Consider only GET and POST
     endpoints = [
-        (f"{operation_name.upper()} {route}", docs.get("description"), docs)
+        (route, docs.get("description"), docs)
         for route, operation in spec["paths"].items()
         for operation_name, docs in operation.items()
         if operation_name in ["get", "post"]
