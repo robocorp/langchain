@@ -1,6 +1,4 @@
 """OpenAPI spec representation helpers"""
-import yaml
-
 from dataclasses import dataclass
 from typing import List, Tuple
 
@@ -24,10 +22,8 @@ class ReducedOpenAPISpec:
     endpoints: List[Tuple[str, str, dict]]
 
 
-def reduce_openapi_spec(yaml_spec: str, dereference: bool = True) -> ReducedOpenAPISpec:
+def reduce_openapi_spec(url: str, spec: str) -> ReducedOpenAPISpec:
     """Simplify OpenAPI spec to only required information for the agent"""
-
-    spec = yaml.safe_load(yaml_spec)
 
     # 1. Consider only GET and POST
     endpoints = [
@@ -39,11 +35,10 @@ def reduce_openapi_spec(yaml_spec: str, dereference: bool = True) -> ReducedOpen
 
     # 2. Replace any refs so that complete docs are retrieved.
     # Note: probably want to do this post-retrieval, it blows up the size of the spec.
-    if dereference:
-        endpoints = [
-            (name, description, dereference_refs(docs, full_schema=spec))
-            for name, description, docs in endpoints
-        ]
+    endpoints = [
+        (name, description, dereference_refs(docs, full_schema=spec))
+        for name, description, docs in endpoints
+    ]
 
     # 3. Strip docs down to required request args + happy path response.
     def reduce_endpoint_docs(docs: dict) -> dict:
@@ -70,8 +65,13 @@ def reduce_openapi_spec(yaml_spec: str, dereference: bool = True) -> ReducedOpen
         (name, description, reduce_endpoint_docs(docs))
         for name, description, docs in endpoints
     ]
+
     return ReducedOpenAPISpec(
-        servers=spec["servers"],
+        servers=[
+            {
+                url,
+            }
+        ],
         description=spec["info"].get("description", ""),
         endpoints=endpoints,
     )
