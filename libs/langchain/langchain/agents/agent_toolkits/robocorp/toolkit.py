@@ -33,7 +33,7 @@ from langsmith import Client
 
 
 MAX_RESPONSE_LENGTH = 5000
-LLM_TRACE_HEADER = "X-llm-trace"
+LLM_TRACE_HEADER = "X-action-trace"
 
 
 class RunDetailsCallbackHandler(BaseCallbackHandler):
@@ -67,7 +67,10 @@ class RequestsPostToolWithParsing(BaseRequestsTool, BaseTool):
     response_length: Optional[int] = MAX_RESPONSE_LENGTH
     """Maximum length of the response to be returned."""
     llm_chain: LLMChain
+    """Run detail information"""
     run_details: dict
+    """Request API key"""
+    api_key: str
 
     def _run(self, text: str, **kwargs: Any) -> str:
         try:
@@ -100,6 +103,7 @@ class RobocorpToolkit(BaseToolkit):
     """Toolkit exposing Robocorp Action Server provided actions."""
 
     url: str = Field(exclude=True)
+    api_key: str = Field(exclude=True)
     llm: BaseLanguageModel = Field(exclude=True)
 
     class Config:
@@ -113,7 +117,9 @@ class RobocorpToolkit(BaseToolkit):
         # Prepare request tools
         llm_chain = LLMChain(llm=self.llm, prompt=REQUESTS_RESPONSE_PROMPT)
 
-        requests_wrapper = RequestsWrapper(headers={})
+        requests_wrapper = RequestsWrapper(
+            headers={"Authorization": f"Bearer {self.api_key}"}
+        )
         run_details = {}
 
         tools: List[BaseTool] = [
@@ -121,6 +127,7 @@ class RobocorpToolkit(BaseToolkit):
                 requests_wrapper=requests_wrapper,
                 llm_chain=llm_chain,
                 run_details=run_details,
+                api_key=self.api_key,
             ),
         ]
 
