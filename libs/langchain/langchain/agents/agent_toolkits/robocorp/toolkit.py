@@ -109,7 +109,7 @@ class RobocorpToolkit(BaseToolkit):
     class Config:
         arbitrary_types_allowed = True
 
-    def get_tools(self) -> List[BaseTool]:
+    def get_tools(self, **kwargs) -> List[BaseTool]:
         # Fetch and format the API spec
         response = requests.get(self.url)
 
@@ -150,7 +150,13 @@ class RobocorpToolkit(BaseToolkit):
         with tracing_v2_enabled():
             callbacks.append(RunDetailsCallbackHandler(run_details))
 
-        callback_manager = CallbackManager(callbacks)
+        if "callback_manager" in kwargs:
+            callback_manager: CallbackManager = kwargs["callback_manager"]
+
+            for callback in callbacks:
+                callback_manager.add_handler(callback)
+        else:
+            callback_manager = CallbackManager(callbacks)
 
         # Prepare the toolkit
         for name, _, docs in api_spec.endpoints:
