@@ -111,7 +111,8 @@ class RobocorpToolkit(BaseToolkit):
 
     def get_tools(self) -> List[BaseTool]:
         # Fetch and format the API spec
-        response = requests.get(f"{self.url}/openapi.json")
+        response = requests.get(self.url)
+
         api_spec = reduce_openapi_spec(self.url, response.json())
 
         # Prepare request tools
