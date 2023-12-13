@@ -111,9 +111,14 @@ class RobocorpToolkit(BaseToolkit):
 
     def get_tools(self, **kwargs) -> List[BaseTool]:
         # Fetch and format the API spec
-        response = requests.get(self.url)
-
-        api_spec = reduce_openapi_spec(self.url, response.json())
+        try:
+            response = requests.get(self.url)
+            json_spec = response.json()
+            api_spec = reduce_openapi_spec(self.url, json_spec)
+        except Exception:
+            raise ValueError(
+                f"Failed to fetch OpenAPI schema from Action Server -  {self.url}"
+            )
 
         # Prepare request tools
         llm_chain = LLMChain(llm=self.llm, prompt=REQUESTS_RESPONSE_PROMPT)
