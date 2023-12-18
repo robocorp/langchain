@@ -29,6 +29,7 @@ from langchain.agents.agent import AgentExecutor
 from langchain.agents.tools import Tool
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain.callbacks.manager import CallbackManager
+from langchain.chat_models import ChatOpenAI
 from langsmith import Client
 
 
@@ -71,6 +72,8 @@ class RequestsPostToolWithParsing(BaseRequestsTool, BaseTool):
     run_details: dict
     """Request API key"""
     api_key: str
+    """Should the request include the trace header"""
+    report_trace: bool
 
     def _run(self, text: str, **kwargs: Any) -> str:
         try:
@@ -80,7 +83,7 @@ class RequestsPostToolWithParsing(BaseRequestsTool, BaseTool):
             raise e
 
         try:
-            if "run_id" in self.run_details:
+            if self.report_trace and "run_id" in self.run_details:
                 client = Client()
                 run = client.read_run(self.run_details["run_id"])
                 self.requests_wrapper.headers[LLM_TRACE_HEADER] = run.url
@@ -103,8 +106,11 @@ class RobocorpToolkit(BaseToolkit):
     """Toolkit exposing Robocorp Action Server provided actions."""
 
     url: str = Field(exclude=True)
+    """Action Server URL"""
     api_key: str = Field(exclude=True)
-    llm: BaseLanguageModel = Field(exclude=True)
+    """Action Server request API key"""
+    report_trace: bool = Field(exclude=True, default=False)
+    """Should requests to ACtion Server include Langsmith trace, if available"""
 
     class Config:
         arbitrary_types_allowed = True
@@ -119,9 +125,11 @@ class RobocorpToolkit(BaseToolkit):
             raise ValueError(
                 f"Failed to fetch OpenAPI schema from Action Server -  {self.url}"
             )
-
+        
+        llm = kwargs.get("llm", ChatOpenAI())
+            
         # Prepare request tools
-        llm_chain = LLMChain(llm=self.llm, prompt=REQUESTS_RESPONSE_PROMPT)
+        llm_chain = LLMChain(llm=llm, prompt=REQUESTS_RESPONSE_PROMPT)
 
         requests_wrapper = RequestsWrapper(
             headers={"Authorization": f"Bearer {self.api_key}"}
@@ -133,6 +141,7 @@ class RobocorpToolkit(BaseToolkit):
                 requests_wrapper=requests_wrapper,
                 llm_chain=llm_chain,
                 run_details=run_details,
+                report_trace=self.report_trace,
                 api_key=self.api_key,
             ),
         ]
@@ -150,18 +159,14 @@ class RobocorpToolkit(BaseToolkit):
             "tool_descriptions": tool_descriptions,
         }
 
+        callback_manager = kwargs.get("callback_manager", CallbackManager([]))
         callbacks: List[BaseCallbackHandler] = []
 
         with tracing_v2_enabled():
             callbacks.append(RunDetailsCallbackHandler(run_details))
 
-        if "callback_manager" in kwargs:
-            callback_manager: CallbackManager = kwargs["callback_manager"]
-
-            for callback in callbacks:
-                callback_manager.add_handler(callback)
-        else:
-            callback_manager = CallbackManager(callbacks)
+        for callback in callbacks:
+            callback_manager.add_handler(callback)
 
         # Prepare the toolkit
         for name, _, docs in api_spec.endpoints:
@@ -183,13 +188,14 @@ class RobocorpToolkit(BaseToolkit):
             )
 
             agent = ZeroShotAgent(
-                llm_chain=LLMChain(llm=self.llm, prompt=prompt),
+                llm_chain=LLMChain(llm=llm, prompt=prompt),
                 allowed_tools=[tool.name for tool in tools],
             )
 
             executor = AgentExecutor.from_agent_and_tools(
                 agent=agent,
                 tools=tools,
+                handle_parsing_errors=True,
                 verbose=True,
                 tags=["robocorp-action-server"],
             )
