@@ -17,6 +17,7 @@ from langchain.agents.agent_toolkits.robocorp.prompts import (
 )
 from langchain.callbacks.manager import tracing_v2_enabled
 from langchain.agents.agent_toolkits.robocorp.spec import (
+    ensure_openapi_path,
     reduce_openapi_spec,
     get_required_param_descriptions,
 )
@@ -107,7 +108,7 @@ class RobocorpToolkit(BaseToolkit):
 
     url: str = Field(exclude=True)
     """Action Server URL"""
-    api_key: str = Field(exclude=True)
+    api_key: str = Field(exclude=True, default="")
     """Action Server request API key"""
     report_trace: bool = Field(exclude=True, default=False)
     """Should requests to ACtion Server include Langsmith trace, if available"""
@@ -118,12 +119,13 @@ class RobocorpToolkit(BaseToolkit):
     def get_tools(self, **kwargs) -> List[BaseTool]:
         # Fetch and format the API spec
         try:
-            response = requests.get(self.url)
+            spec_url = ensure_openapi_path(self.url)
+            response = requests.get(spec_url)
             json_spec = response.json()
             api_spec = reduce_openapi_spec(self.url, json_spec)
         except Exception:
             raise ValueError(
-                f"Failed to fetch OpenAPI schema from Action Server -  {self.url}"
+                f"Failed to fetch OpenAPI schema from Action Server - {self.url}"
             )
         
         llm = kwargs.get("llm", ChatOpenAI())

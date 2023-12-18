@@ -4,11 +4,12 @@ from langchain.agents.agent_toolkits import RobocorpToolkit
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.pydantic_v1 import BaseModel
 
-# Initialize Robocorp Toolkit
+# Initialize the LLM model
 llm = ChatOpenAI(model="gpt-4", temperature=0)
 
-toolkit = RobocorpToolkit(url="http://localhost:8080", llm=llm)
-tools = toolkit.get_tools()
+# Initialize Robocorp Toolkit
+toolkit = RobocorpToolkit(url="http://localhost:8080")
+tools = toolkit.get_tools(llm=llm)
 
 # Initialize Agent
 template = """You are a helpful assistant. Lookup relevant information and perform actions as needed."""
@@ -25,12 +26,11 @@ agent = OpenAIFunctionsAgent(
     prompt=prompt,
     tools=tools,
 )
-agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
+agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 # Typings for Langserve playground
 class AgentInputs(BaseModel):
     input: str
-
 
 agent_executor = agent_executor.with_types(input_type=AgentInputs)

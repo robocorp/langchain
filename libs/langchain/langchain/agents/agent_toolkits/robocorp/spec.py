@@ -1,6 +1,7 @@
 """OpenAPI spec representation helpers"""
 from dataclasses import dataclass
 from typing import List, Tuple
+from urllib.parse import urlparse, urlunparse
 
 from langchain.utils.json_schema import dereference_refs
 
@@ -97,3 +98,14 @@ def get_required_param_descriptions(endpoint_spec: dict) -> str:
                 descriptions.append(value.get("description"))
 
     return ", ".join(descriptions)
+
+def ensure_openapi_path(url):
+    parsed_url = urlparse(url)
+    if parsed_url.path.endswith('/openapi.json'):
+        return url
+    elif parsed_url.path.endswith('/'):
+        new_path = parsed_url.path + 'openapi.json'
+    else:
+        new_path = parsed_url.path + '/openapi.json'
+        
+    return urlunparse((parsed_url.scheme, parsed_url.netloc, new_path, parsed_url.params, parsed_url.query, parsed_url.fragment))
