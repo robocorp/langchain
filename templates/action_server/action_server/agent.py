@@ -12,17 +12,17 @@ toolkit = RobocorpToolkit(url="http://localhost:8080")
 tools = toolkit.get_tools(llm=llm)
 
 # Initialize Agent
-template = """You are a helpful assistant. Lookup relevant information and perform actions as needed."""
+template = """You are a helpful assistant"""
 prompt = ChatPromptTemplate.from_messages(
-    [
-        ("system", template),
+  [
+        ("system", "You are a helpful assistant"),
+        ("user", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ("human", "{input}"),
     ]
 )
 
 agent = OpenAIFunctionsAgent(
-    llm=ChatOpenAI(temperature=0, model="gpt-4"),
+    llm=llm,
     prompt=prompt,
     tools=tools,
 )
