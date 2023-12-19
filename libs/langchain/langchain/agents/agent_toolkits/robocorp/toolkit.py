@@ -78,7 +78,8 @@ class RequestsPostToolWithParsing(BaseRequestsTool, BaseTool):
 
     def _run(self, text: str, **kwargs: Any) -> str:
         try:
-            data = json.loads(text)
+            json_text = text[text.find('{'):text.rfind('}') + 1]
+            data = json.loads(json_text)
 
         except json.JSONDecodeError as e:
             raise e

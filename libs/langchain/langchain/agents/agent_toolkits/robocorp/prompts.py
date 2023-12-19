@@ -13,6 +13,7 @@ Always use double quotes for strings in the json string."""
 REQUESTS_RESPONSE_PROMPT = PromptTemplate(
     template="""Here is an API response:\n\n{response}\n\n====
 Your task is to extract some information according to these instructions: {instructions}
+If no instructions are given, reply with the API response directly.
 If the response indicates an error, you should instead output a summary of the error.
 
 Output:""",
@@ -27,6 +28,8 @@ to an API given given the documentation of an API endpoint and should execute it
 If you cannot complete them and run into issues, you should explain the issue. If you're unable to resolve an API call, you can retry the API call.
 When interacting with API objects, you should extract ids for inputs to other API calls but ids and names for outputs returned to the User.
 Do not use Markdown to format action inputs. You are forbidden to use ``` in your thoughts or action inputs.
+
+Allways prefix your final answer with "Final Answer:"
 
 Here is documentation on the API:
 Base url: {api_url}
