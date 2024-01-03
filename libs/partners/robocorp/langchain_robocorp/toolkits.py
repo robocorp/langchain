@@ -12,6 +12,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.pydantic_v1 import BaseModel, Field, create_model
 from langchain_core.tools import BaseTool, StructuredTool
 from langchain_core.tracers.context import _tracing_v2_is_enabled
+from langsmith import Client
 
 from langchain_robocorp._common import (
     get_required_param_descriptions,
@@ -134,6 +135,15 @@ class ActionServerToolkit(BaseModel):
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
                 }
+                try:
+                    if self.report_trace and "run_id" in run_details:
+                        client = Client()
+                        run = client.read_run(self.run_details["run_id"])
+                        if run.url:
+                            headers[LLM_TRACE_HEADER] = run.url
+                except Exception:
+                    pass
+
                 response = requests.post(
                     endpoint, headers=headers, data=json.dumps(data)
                 )
