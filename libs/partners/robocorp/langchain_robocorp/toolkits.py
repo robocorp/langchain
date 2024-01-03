@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 from urllib.parse import urljoin
 
 import requests
@@ -128,8 +128,8 @@ class ActionServerToolkit(BaseModel):
             "api_url": self.url,
         }
 
-        def create_function(endpoint):
-            def func(**data):
+        def create_function(endpoint: str) -> Callable:
+            def func(**data: Any) -> Any:
                 headers = {
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
@@ -163,13 +163,14 @@ class ActionServerToolkit(BaseModel):
             fields = {}
             for param in param_details:
                 fields[param["name"]] = (type_mapping[param["type"]], ...)
+            schema_model = create_model("DynamicToolInputSchema", **fields)  # type: ignore
 
             toolkit.append(
                 StructuredTool(
                     name=tool_name,
                     func=create_function(urljoin(self.url, endpoint_name)),
                     description=tool_description,
-                    args_schema=create_model("DynamicToolInputSchema", **fields),
+                    args_schema=schema_model,
                     callback_manager=callback_manager,
                 )
             )
